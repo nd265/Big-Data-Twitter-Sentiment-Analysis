@@ -27,7 +27,7 @@ CREATE EXTERNAL TABLE raw_tweets (
       followers_count:INT,
       statuses_count:INT,
       verified:BOOLEAN,
-      location :string
+      location :STRING
       >
    
 )
@@ -81,92 +81,232 @@ CREATE VIEW remove_spam AS
 
 970
 
-#CREATE VIEW splitted_words as select *,split(text,' ') as words from remove_spam;
+CREATE VIEW splitted_words AS 
+    SELECT *,
+    split(text,' ') AS words 
+    FROM remove_spam;
 
-#CREATE VIEW tweet_word as select id,screen_name,name ,word from splitted_words LATERAL VIEW explode(words) w as word;
+CREATE VIEW tweet_word AS 
+    SELECT 
+        id,
+        screen_name,
+        name,
+        word 
+            FROM 
+                splitted_words LATERAL VIEW explode(words) w 
+                    AS word;
 
 ---remove non english words
-#CREATE VIEW clean_tweet_word as select * from tweet_word where regexp_replace(tweet_word.word,'[^a-zA-Z0-9]+', '')!='';
+CREATE VIEW clean_tweet_word AS 
+    SELECT * 
+        FROM tweet_word 
+        WHERE 
+            regexp_replace(tweet_word.word,'[^a-zA-Z0-9]+', '')!='';
 
-#CREATE VIEW clean_tweet_words as select * from remove_spam where regexp_replace(remove_spam.text,'[^a-zA-Z0-9]+', '')!='';
+CREATE VIEW clean_tweet_words AS 
+    SELECT * 
+        FROM remove_spam 
+        WHERE 
+            regexp_replace(remove_spam.text,'[^a-zA-Z0-9]+', '')!='';
 
-#CREATE VIEW remove_non_english_text as select * from remove_spam where regexp_replace(remove_spam.text,'[^a-zA-Z0-9]+', '')!='';
+CREATE VIEW remove_non_english_text AS 
+    SELECT * 
+        FROM remove_spam 
+        WHERE 
+            regexp_replace(remove_spam.text,'[^a-zA-Z0-9]+', '')!='';
 
-#CREATE VIEW remove_non_english_locations as select * from remove_spam where regexp_replace(remove_spam.`user`.location,'[^a-zA-Z0-9]+', '')!='';
-
-
-CREATE VIEW cleaned_tweets as select * from remove_spam where regexp_replace(remove_spam.location,'[^a-zA-Z0-9]+', '')!='' AND regexp_replace(remove_spam.location,'[^a-zA-Z0-9]+', '')!='';
-
-
-#CREATE VIEW clean_tweet_word2 as select id,name,word from clean_tweet_word;
-
-hive> set mapreduce.map.memory.mb=4096;
-
-hive >set mapreduce.map.java.opts=-Xmx3600M;
+CREATE VIEW remove_non_english_locations AS 
+    SELECT * FROM remove_spam 
+    WHERE 
+        regexp_replace(remove_spam.`user`.location,'[^a-zA-Z0-9]+', '')!='';
 
 
-CREATE VIEW sentiment2 as select ctw.id,ctw.word,ctw.name,dictionary.rating from clean_tweet_word ctw LEFT OUTER JOIN dictionary ON(ctw.word =dictionary.word);
+CREATE VIEW cleaned_tweets AS 
+    SELECT * 
+    FROM remove_spam 
+    WHERE 
+        regexp_replace(remove_spam.location,'[^a-zA-Z0-9]+', '')!='' 
+        AND 
+        regexp_replace(remove_spam.location,'[^a-zA-Z0-9]+', '')!='';
 
-select id,name,rating from sentiment2 group by(name);
 
-CREATE sentiment_analysis as select name,avg(rating) as rating from sentiment2 group by name oder by(rating) desc;
+CREATE VIEW clean_tweet_word2 AS 
+    SELECT 
+        id,
+        name,
+        word 
+        FROM clean_tweet_word;
+
+set mapreduce.map.memory.mb=4096;
+
+set mapreduce.map.java.opts=-Xmx3600M;
+
+
+CREATE VIEW sentiment2 AS 
+    SELECT 
+        ctw.id,
+        ctw.word,
+        ctw.name,
+        dictionary.rating 
+            FROM 
+                clean_tweet_word ctw LEFT OUTER JOIN dictionary 
+                ON(ctw.word =dictionary.word);
+
+-- SELECT id,name,rating FROM sentiment2 group by(name);
+
+CREATE sentiment_analysis AS 
+    SELECT 
+        name,
+        avg(rating) AS rating 
+            FROM sentiment2 
+            GROUP BY name 
+            ORDER BY(rating) DESC;
 
 ----top 10 hashtags:
-CREATE VIEW hash_tags as select ht,count(ht) as countht from cleaned_tweets lateral VIEW explode(hashtags.text) dummy as ht group by ht order by countht desc limit 10;
+CREATE VIEW hash_tags AS 
+    SELECT 
+        ht,
+        count(ht) AS countht 
+            FROM cleaned_tweets 
+                lateral VIEW explode(hashtags.text) dummy AS ht 
+                GROUP BY ht 
+                ORDER BY countht DESC 
+                LIMIT 10;
  
 --top 5 locations of tweet users;
-CREATE VIEW top_locations as select location, count(location) as cnt from cleaned_tweets group by(location) order by(cnt) desc limit 5;
+CREATE VIEW top_locations AS 
+    SELECT 
+        location, 
+        count(location) AS cnt 
+            FROM cleaned_tweets 
+            GROUP BY(location) 
+            ORDER BY(cnt) DESC 
+            LIMIT 5;
 
 --top 10 users with most tweets--most active users
-CREATE VIEW top_users as select screen_name,count(id) as cnt_id from cleaned_tweets group by screen_name having screen_name IS NOT NULL order by (cnt_id) desc limit 10;
+CREATE VIEW top_users AS 
+    SELECT 
+        screen_name,
+        count(id) AS cnt_id 
+            FROM cleaned_tweets 
+            GROUP BY screen_name 
+            HAVING screen_name IS NOT NULL 
+            ORDER BY (cnt_id) DESC 
+            LIMIT 10;
 
 
 --extract the sources:
-CREATE VIEW sources_tweet as select screen_name, substr(source,instr(source,">"),instr(source,"</a>")-instr(source,">")) as source from cleaned_tweets;
+CREATE VIEW sources_tweet AS 
+    SELECT 
+        screen_name, 
+        substr(source,instr(source,">"),instr(source,"</a>")-instr(source,">")) AS source 
+            FROM cleaned_tweets;
 
 --top sources used by the users
-CREATE VIEW top_sources as select source,count(source) as cnt_source from sources_tweet group by(source) order by cnt_source desc limit 3;
+CREATE VIEW top_sources AS 
+    SELECT 
+        source,
+        count(source) AS cnt_source 
+            FROM sources_tweet 
+            GROUP BY(source) 
+            ORDER BY cnt_source DESC 
+            LIMIT 3;
 
 --top 10 users with most followers
-CREATE VIEW max_followers as select screen_name,followers_count from cleaned_tweets order by followers_count desc limit 10;
+CREATE VIEW max_followers AS 
+    SELECT 
+        screen_name,
+        followers_count 
+            FROM cleaned_tweets 
+            ORDER BY followers_count DESC 
+            LIMIT 10;
 
 
 --top 10 whose posts are most retweeetd 
-CREATE VIEW most_retweeted_people as select retweeted_status.`user`.screen_name,count(retweeted_status.`user`.screen_name) as cnt_screen_name from cleaned_tweets group by(retweeted_status.`user`.screen_name) order by cnt_screen_name desc limit 10;
+CREATE VIEW most_retweeted_people AS 
+    SELECT 
+        retweeted_status.`user`.screen_name,
+        count(retweeted_status.`user`.screen_name) AS cnt_screen_name 
+            FROM cleaned_tweets 
+            GROUP BY(retweeted_status.`user`.screen_name) 
+            ORDER BY cnt_screen_name DESC 
+            LIMIT 10;
 
 --location and sources
-CREATE VIEW location_source as select sources_tweet.source,cleaned_tweets.location from sources_tweet inner join cleaned_tweets on sources_tweet.screen_name=cleaned_tweets.screen_name;
+CREATE VIEW location_source AS 
+    SELECT 
+        sources_tweet.source,
+        cleaned_tweets.location 
+            FROM sources_tweet 
+            INNER JOIN cleaned_tweets 
+            ON 
+            sources_tweet.screen_name=cleaned_tweets.screen_name;
 
 set hive.cli.print.header=true;
 
-insert overwrite directory '/project/output/most_retweeted_people' row format delimited fields terminated by ','  select * from most_retweeted_people;
+INSERT overwrite directory '/project/output/most_retweeted_people' ROW format delimited fields terminated BY ','  SELECT * FROM most_retweeted_people;
 
-insert overwrite directory '/project/output/max_followers' row format delimited fields terminated by ','  select * from max_followers;
+INSERT overwrite directory '/project/output/max_followers' ROW format delimited fields terminated BY ','  SELECT * FROM max_followers;
 
-insert overwrite directory '/project/output/top_sources' row format delimited fields terminated by ','  select * from top_sources;
+INSERT overwrite directory '/project/output/top_sources' ROW format delimited fields terminated BY ','  SELECT * FROM top_sources;
 
-insert overwrite directory '/project/output/top_locations' row format delimited fields terminated by ',' select * from top_locations; 
+INSERT overwrite directory '/project/output/top_locations' ROW format delimited fields terminated BY ',' SELECT * FROM top_locations; 
 
-insert overwrite directory '/project/output/hashtags' row format delimited fields terminated by ','  select * from hash_tags;
+INSERT overwrite directory '/project/output/hashtags' ROW format delimited fields terminated BY ','  SELECT * FROM hash_tags;
 
-CREATE VIEW split_words as select screen_name as screen_name,split(text, ' ') as words from cleaned_tweets;
+CREATE VIEW split_words AS 
+    SELECT 
+        screen_name AS screen_name,
+        split(text, ' ') AS words 
+            FROM cleaned_tweets;
 
-CREATE TABLE tweet_word as select id as id, word from split_words lateral VIEW explode(words) w as word;
+CREATE TABLE tweet_word AS 
+    SELECT 
+        id AS id, 
+        word FROM split_words 
+            lateral VIEW explode(words) w AS word;
 
-CREATE VIEW word_rating as select tweet_word.screen_name,tweet_word.word,dictionary.rating from tweet_word inner join dictionary on (tweet_word.word=dictionary.word);
+CREATE VIEW word_rating AS 
+    SELECT 
+        tweet_word.screen_name,
+        tweet_word.word,
+        dictionary.rating 
+            FROM tweet_word 
+            INNER JOIN dictionary 
+            ON 
+            (tweet_word.word=dictionary.word);
 
-CREATE VIEW sentiment as select screen_name,avg(rating) as rating from word_rating group by(word_rating.screen_name) order by rating desc;
+CREATE VIEW sentiment AS 
+    SELECT 
+        screen_name,
+        avg(rating) AS rating 
+            FROM word_rating 
+            GROUP BY(word_rating.screen_name) 
+            ORDER BY rating DESC;
 
 
 
-CREATE VIEW count_sentiment as select count(screen_name>0.0) as positive,count(screen_name<0.0) as negative, count(screen_name=0) as neutral from sentiment;
+CREATE VIEW count_sentiment AS 
+    SELECT 
+        count(screen_name>0.0) AS positive,
+        count(screen_name<0.0) AS negative, 
+        count(screen_name=0) AS neutral 
+            FROM sentiment;
 
- insert overwrite directory '/project/output/count_sentiment' row format delimited fields terminated by ','  select * from count_sentiment;
+ INSERT overwrite directory '/project/output/count_sentiment' ROW format delimited fields terminated BY ','  SELECT * FROM count_sentiment;
 
 
 
 
-CREATE VIEW location_sentiment as select location,rating from cleaned_tweets left outer join sentiment on cleaned_tweets.screen_name=sentiment.screen_name group by(location) having location is not null;
+CREATE VIEW location_sentiment AS 
+    SELECT 
+        location,
+        rating 
+            FROM cleaned_tweets 
+            LEFT OUTER JOIN sentiment 
+            ON cleaned_tweets.screen_name=sentiment.screen_name 
+            GROUP BY(location) 
+            HAVING location IS NOT NULL;
 
 
 
