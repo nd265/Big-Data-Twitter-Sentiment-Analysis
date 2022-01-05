@@ -7,6 +7,15 @@ add jar /opt/apache-hive-2.1.0-bin/lib/Hive-JSON-Serde/json-serde/target/json-se
 CREATE DATABASE twitter_tweets;
 USE twitter_tweets;
 
+
+-- start the flume agent
+-- Flume stores the Tweets data in JSON format in HDFS directory
+flume-ng agent -n TwitterAgent -f /opt/apache-flume-1.6.0-bin/conf/flume.conf
+
+
+-- Create an external table in Hive in the same directory where our tweets are present in HDFS 
+-- i.e., '/project/db/RAW_TWEETS/', so that tweets which are present in this location will be automatically stored in the Hive table.
+-- Mention the JsonSerDe so that Hive can ingest the data into the table
 CREATE EXTERNAL TABLE raw_tweets (
    id BIGINT,
    created_at STRING,
@@ -37,20 +46,17 @@ CREATE EXTERNAL TABLE raw_tweets (
     LOCATION '/project/db/RAW_TWEETS'
     ROW FORMAT SERDE 'com.cloudera.hive.serde.JsonSerDe';
 
--- start the flume agent
-flume-ng agent -n TwitterAgent -f /opt/apache-flume-1.6.0-bin/conf/flume.conf
 
--- load tweets into Hive
-LOAD DATA inpath '/twitter/tweets' overwrite INTO TABLE raw_tweets;
-
--- create table to store AFINN 165 dictionary woth sentiment valences
+-- create table to store AFINN165 dictionary with sentiment valences
 CREATE TABLE dictionary(
     word STRING,
     rating INT) 
     ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t';
 
+
 -- load AFINN dictionary to the Hive table 
 LOAD DATA LOCAL inpath '../data/afinn165.txt' overwrite INTO TABLE dictionary;
+
 
 -- Extract and keep only those columns essential for analysis
 CREATE VIEW filter_tweets AS
@@ -70,11 +76,11 @@ CREATE VIEW filter_tweets AS
    FROM 
         raw_tweets;
 
+
 -- Identify and remove spam users based on the following conditions:
 -- 1) who follow more people but are followed by less people (friends_count/followers_count), 
 -- 2) who tweet short length messages
 -- 3) who use a lot of hashtags
-
 CREATE VIEW remove_spam AS
     SELECT * 
         FROM filter_tweets 
@@ -95,12 +101,33 @@ CREATE VIEW cleaned_tweets AS
         AND 
         regexp_replace(remove_spam.location,'[^a-zA-Z0-9]+', '')!='';
 
+set hive.cli.print.header=true;
 
-set mapreduce.map.memory.mb=4096;
+-- split the tweets into single words as comma separated values in array format in the row
+CREATE VIEW split_words AS 
+    SELECT 
+        screen_name AS screen_name,
+        split(text, ' ') AS words 
+            FROM cleaned_tweets;
 
-set mapreduce.map.java.opts=-Xmx3600M;
+-- split each word inside the array as a new row using the built in UDTF 'explode' and create a row per word
+-- Also, convert the word to lowercase for comparison with word in 'dictionary' table
+CREATE TABLE tweet_word AS 
+    SELECT 
+        id AS id, 
+        lower(word) FROM split_words 
+            lateral VIEW explode(words) w AS word;
 
-
+-- join tables 'tweet_word' and 'dictionary' to map the sentiment valences from the words in dictionary to the tweet
+CREATE VIEW word_rating AS 
+    SELECT 
+        tweet_word.screen_name,
+        tweet_word.word,
+        dictionary.rating 
+            FROM tweet_word 
+            INNER JOIN dictionary 
+            ON 
+            (tweet_word.word=dictionary.word);
 
 ----top 10 hashtags:
 CREATE VIEW hash_tags AS 
@@ -134,7 +161,6 @@ CREATE VIEW top_users AS
             ORDER BY (cnt_id) DESC 
             LIMIT 10;
 
-
 --extract the sources:
 CREATE VIEW sources_tweet AS 
     SELECT 
@@ -161,8 +187,7 @@ CREATE VIEW max_followers AS
             ORDER BY followers_count DESC 
             LIMIT 10;
 
-
---top 10 whose posts are most retweeetd 
+--top 10 users whose posts are most retweeetd 
 CREATE VIEW most_retweeted_people AS 
     SELECT 
         retweeted_status.screen_name,
@@ -172,45 +197,6 @@ CREATE VIEW most_retweeted_people AS
             ORDER BY cnt_screen_name DESC 
             LIMIT 10;
 
---location and sources
-CREATE VIEW location_source AS 
-    SELECT 
-        sources_tweet.source,
-        cleaned_tweets.location 
-            FROM sources_tweet 
-            INNER JOIN cleaned_tweets 
-            ON 
-            sources_tweet.screen_name=cleaned_tweets.screen_name;
-
-set hive.cli.print.header=true;
-
-
--- split the tweets into single words as comma separated values in array format in the row
-CREATE VIEW split_words AS 
-    SELECT 
-        screen_name AS screen_name,
-        split(text, ' ') AS words 
-            FROM cleaned_tweets;
-
--- split each word inside the array as a new row using the built in UDTF 'explode' and create a row per word
--- Also, convert the word to lowercase for comparison with word in 'dictionary' table
-CREATE TABLE tweet_word AS 
-    SELECT 
-        id AS id, 
-        lower(word) FROM split_words 
-            lateral VIEW explode(words) w AS word;
-
--- join tables 'tweet_word' and 'dictionary' to map the sentiment valences from the words in dictionary to the tweet
-CREATE VIEW word_rating AS 
-    SELECT 
-        tweet_word.screen_name,
-        tweet_word.word,
-        dictionary.rating 
-            FROM tweet_word 
-            INNER JOIN dictionary 
-            ON 
-            (tweet_word.word=dictionary.word);
-
 -- sentiment per user
 CREATE VIEW sentiment AS 
     SELECT 
@@ -219,16 +205,6 @@ CREATE VIEW sentiment AS
             FROM word_rating 
             GROUP BY(word_rating.screen_name) 
             ORDER BY rating DESC;
-
-
--- overall sentiment for all users
-CREATE VIEW count_sentiment AS 
-    SELECT 
-        count(screen_name>0.0) AS positive,
-        count(screen_name<0.0) AS negative, 
-        count(screen_name=0) AS neutral 
-            FROM sentiment;
-
 
 -- avg sentiment per country
 CREATE VIEW location_sentiment AS 
@@ -241,22 +217,31 @@ CREATE VIEW location_sentiment AS
             GROUP BY(location) 
             HAVING location IS NOT NULL;
 
+-- overall sentiment for all users
+CREATE VIEW count_sentiment AS 
+    SELECT 
+        count(screen_name>0.0) AS positive,
+        count(screen_name<0.0) AS negative, 
+        count(screen_name=0) AS neutral 
+            FROM sentiment;
 
 --save all results views as csv files
-INSERT overwrite directory '../results/most_retweeted_people' ROW format delimited fields terminated BY ','  SELECT * FROM most_retweeted_people;
-
-INSERT overwrite directory '../results/max_followers' ROW format delimited fields terminated BY ','  SELECT * FROM max_followers;
-
-INSERT overwrite directory '../results/top_sources' ROW format delimited fields terminated BY ','  SELECT * FROM top_sources;
-
-INSERT overwrite directory '../results/top_locations' ROW format delimited fields terminated BY ',' SELECT * FROM top_locations; 
 
 INSERT overwrite directory '../results/hashtags' ROW format delimited fields terminated BY ','  SELECT * FROM hash_tags;
 
+INSERT overwrite directory '../results/top_locations' ROW format delimited fields terminated BY ',' SELECT * FROM top_locations; 
+
 INSERT overwrite directory '../results/users' ROW format delimited fields terminated BY ','  SELECT * FROM top_users;
+
+INSERT overwrite directory '../results/top_sources' ROW format delimited fields terminated BY ','  SELECT * FROM top_sources;
+
+INSERT overwrite directory '../results/max_followers' ROW format delimited fields terminated BY ','  SELECT * FROM max_followers;
+
+INSERT overwrite directory '../results/most_retweeted_people' ROW format delimited fields terminated BY ','  SELECT * FROM most_retweeted_people;
+
+INSERT overwrite directory '../results/location_sentiment_final' ROW format delimited fields terminated BY ','  SELECT * FROM location_sentiment;
 
 INSERT overwrite directory '../results/count_sentiment' ROW format delimited fields terminated BY ','  SELECT * FROM count_sentiment;
 
-INSERT overwrite directory '../results/location_sentiment_final' ROW format delimited fields terminated BY ','  SELECT * FROM location_sentiment;
 
 
