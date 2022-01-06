@@ -1,7 +1,7 @@
 # Big-Data-Twitter-Sentiment-Analysis
 Twitter Sentiment analysis on FIFA World Cup using Hadoop frameworks | Mini project during Internship at Birlasoft Pvt Ltd, India 2018
 
-### Workflow
+### High Level Design
 This is the workflow of the project
 ![**Workflow diagram**](https://github.com/nd265/Big-Data-Twitter-Sentiment-Analysis/blob/main/data/assets/workflow_diagram.png?raw=true)
 
