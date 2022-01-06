@@ -1,5 +1,5 @@
 -- author: Navya Dahiya
--- last updated: 10 July, 2018
+-- created: June, 2018
 
 -- add the jar below to allow Hive to parse json data stored by Flume in HDFS
 add jar /opt/apache-hive-2.1.0-bin/lib/Hive-JSON-Serde/json-serde/target/json-serde-1.3.9-SNAPSHOT-jar-with-dependencies.jar 
@@ -55,7 +55,7 @@ CREATE TABLE dictionary(
 
 
 -- load AFINN dictionary to the Hive table 
-LOAD DATA LOCAL inpath '../data/afinn165.txt' overwrite INTO TABLE dictionary;
+LOAD DATA LOCAL inpath 'data/afinn165.txt' overwrite INTO TABLE dictionary;
 
 
 -- Extract and keep only those columns essential for analysis
@@ -227,21 +227,21 @@ CREATE VIEW count_sentiment AS
 
 --save all results views as csv files
 
-INSERT overwrite directory '../results/hashtags' ROW format delimited fields terminated BY ','  SELECT * FROM hash_tags;
+INSERT overwrite directory 'results/hashtags' ROW format delimited fields terminated BY ','  SELECT * FROM hash_tags;
 
-INSERT overwrite directory '../results/top_locations' ROW format delimited fields terminated BY ',' SELECT * FROM top_locations; 
+INSERT overwrite directory 'results/top_locations' ROW format delimited fields terminated BY ',' SELECT * FROM top_locations; 
 
-INSERT overwrite directory '../results/users' ROW format delimited fields terminated BY ','  SELECT * FROM top_users;
+INSERT overwrite directory 'results/users' ROW format delimited fields terminated BY ','  SELECT * FROM top_users;
 
-INSERT overwrite directory '../results/top_sources' ROW format delimited fields terminated BY ','  SELECT * FROM top_sources;
+INSERT overwrite directory 'results/top_sources' ROW format delimited fields terminated BY ','  SELECT * FROM top_sources;
 
-INSERT overwrite directory '../results/max_followers' ROW format delimited fields terminated BY ','  SELECT * FROM max_followers;
+INSERT overwrite directory 'results/max_followers' ROW format delimited fields terminated BY ','  SELECT * FROM max_followers;
 
-INSERT overwrite directory '../results/most_retweeted_people' ROW format delimited fields terminated BY ','  SELECT * FROM most_retweeted_people;
+INSERT overwrite directory 'results/most_retweeted_people' ROW format delimited fields terminated BY ','  SELECT * FROM most_retweeted_people;
 
-INSERT overwrite directory '../results/location_sentiment_final' ROW format delimited fields terminated BY ','  SELECT * FROM location_sentiment;
+INSERT overwrite directory 'results/location_sentiment_final' ROW format delimited fields terminated BY ','  SELECT * FROM location_sentiment;
 
-INSERT overwrite directory '../results/count_sentiment' ROW format delimited fields terminated BY ','  SELECT * FROM count_sentiment;
+INSERT overwrite directory 'results/count_sentiment' ROW format delimited fields terminated BY ','  SELECT * FROM count_sentiment;
 
 
 
