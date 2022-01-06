@@ -31,3 +31,5 @@ After generation of Twitter API tokens and keys:
 
   11) Once, all the analysis is done, store the results in csv format from Hive tables and visualize your results using Python
 To generate graphs, execute the python file `graphs.py` in the 'src' folder
+
+Unfortunately, I could not upload the Twitter data here as during my internship I was not able to take a copy of the large amount of data from the machine due to company's privacy policies.
